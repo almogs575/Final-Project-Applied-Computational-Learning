@@ -1,5 +1,3 @@
-
-
 from tensorflow.keras.datasets import cifar10
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Flatten, Conv2D, MaxPooling2D
@@ -7,6 +5,8 @@ from tensorflow.keras.losses import sparse_categorical_crossentropy
 from tensorflow.keras.optimizers import Adam
 from sklearn.model_selection import KFold
 import numpy as np
+import tensorflow_datasets as tfds
+
 from tensorflow_addons.optimizers import Lookahead
 
 from keras.metrics import Precision, Recall
@@ -21,13 +21,14 @@ optimizer = Adam()
 verbosity = 1
 num_folds = 10
 
-opt = Lookahead(optimizer)
+# opt = Lookahead(optimizer)
 
-opt2=Lookahead(opt)
-
+# opt2=Lookahead(opt)
 
 # Load CIFAR-10 data
 (input_train, target_train), (input_test, target_test) = cifar10.load_data()
+
+# print(type(input_train))
 
 # Determine shape of the data
 input_shape = (img_width, img_height, img_num_channels)
@@ -39,14 +40,6 @@ input_test = input_test.astype('float32')
 # Normalize data
 input_train = input_train / 255
 input_test = input_test / 255
-
-# data1_input_train=input_train[:5000]
-# data1_input_test=input_test[:5000]
-# data1_target_train=target_train[:1000]
-# data1_target_test=target_test[:1000]
-
-
-
 
 # Define per-fold score containers
 acc_per_fold = []
@@ -75,7 +68,7 @@ for train, test in kfold.split(inputs, targets):
   model.add(Dense(no_classes, activation='softmax'))
 
   # Compile the model
-  model.compile(loss=loss_function,optimizer=opt2,metrics=['accuracy'])
+  model.compile(loss=loss_function,optimizer=optimizer,metrics=['accuracy'])
 
 
   # Generate a print
@@ -111,7 +104,17 @@ print('------------------------------------------------------------------------'
 
 
 def load_cifar():
-    print("asd")
+  train_dataset = tfds.load("dataset_name")
+
+  train, test = train_dataset['train'], train_dataset['test']
+  train_numpy = np.vstack(tfds.as_numpy(test))
+  test_numpy = np.vstack(tfds.as_numpy(test))
+
+  X_train = np.array(list(map(lambda x: x[0]['image'], train_numpy)))
+  y_train = np.array(list(map(lambda x: x[0]['label'], train_numpy)))
+
+  X_test = np.array(list(map(lambda x: x[0]['image'], test_numpy)))
+  y_test = np.array(list(map(lambda x: x[0]['label'], test_numpy)))
 
 
 if __name__ == '__main__':
