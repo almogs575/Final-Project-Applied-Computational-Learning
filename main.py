@@ -3,6 +3,8 @@ from tensorflow.keras.layers import Dense, Flatten, Conv2D, MaxPooling2D
 from tensorflow.keras.losses import sparse_categorical_crossentropy
 from tensorflow.keras.optimizers import Adam
 from sklearn.model_selection import KFold
+from sklearn import metrics
+from sklearn.metrics import average_precision_score
 import numpy as np
 import tensorflow_datasets as tfds
 
@@ -128,6 +130,11 @@ def model_training(dataset_name, optimizer):
         fold_no = fold_no + 1
 
     print_scores(acc_per_fold, loss_per_fold)
+    fpr, tpr, thresholds = metrics.roc_curve(input_test, target_test, pos_label=2)
+    # average_precision = average_precision_score(input_test, target_test)
+    average_precision = tpr / (fpr + tpr)
+    print("fpr:" + fpr + " tpr:" + tpr + " auc:" + metrics.auc(fpr, tpr))
+    print("precision:" + str(average_precision))
 
 
 if __name__ == '__main__':
