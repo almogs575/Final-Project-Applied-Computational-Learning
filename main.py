@@ -128,85 +128,108 @@ class lookHead:
     def model_training(self,dataset_name):
         # Load dataset
         (input_train, target_train), (input_test, target_test) = self.load_dataset(dataset_name)
+        data_set_amount=0
+        if dataset_name =='cifar10' or dataset_name== 'fashion_mnist':
+            newarr_input_train = np.array_split(input_train,10)
+            newarr_target_train = np.array_split(target_train,10)
+            newarr_input_test = np.array_split(input_test,10)
+            newarr_target_test = np.array_split(target_test,10)
+            data_set_amount=5
+
+        else:
+            newarr_input_train = np.array_split(input_train, 10)
+            newarr_target_train = np.array_split(target_train, 10)
+            newarr_input_test = np.array_split(input_test, 10)
+            newarr_target_test = np.array_split(target_test, 10)
+            data_set_amount=10
+        for i in range(data_set_amount):
+            self.classes=np.unique(newarr_target_test[i]).size
+            # Determine shape of the data
+            samples, img_width, img_height, img_num_channels = newarr_input_train[i].shape
+            self.shape = (img_width, img_height, img_num_channels)
+            # Merge inputs and targets
+            self.inputs, self.targets = self.normalize_data(newarr_input_train[i], newarr_input_test[i], newarr_target_train[i], newarr_target_test[i])
+
+            # Define per-fold score containers
+            # acc_per_fold = []
+            # loss_per_fold = []
+
+            # Define the K-fold Cross Validator
+            kfold = KFold(n_splits=3, shuffle=True)
+
+            # K-fold Cross Validation model evaluation
+            fold_no = 1
+
+            for train, test in kfold.split(self.inputs, self.targets):
+                self.data_array=[]
+                self.data_array.append(fold_no)
+                study = optuna.create_study(direction="maximize")
+                study.optimize(self.objective, n_trials=3)
 
 
-        # newarr = np.array_split(target_test,10)
 
-        # self.classes=np.unique(newarr[0]).size
+                self.data_array.append(study.best_params)
+                # Generate a print
+                print('------------------------------------------------------------------------')
+                print(f'Training for fold {fold_no} ...')
 
-        # Determine shape of the data
-        samples, img_width, img_height, img_num_channels = input_train.shape
-        self.shape = (img_width, img_height, img_num_channels)
-        # Merge inputs and targets
-        self.inputs, self.targets = self.normalize_data(input_train, input_test, target_train, target_test)
+                model= self.getModel()
+                # Compile the model
+                if self.loohead_model:
+                    model.compile(loss=sparse_categorical_crossentropy,
+                                  optimizer=Lookahead(optimizer=study.best_params['optimizer'], slow_step_size=study.best_params['slow_step_size']),
+                                  metrics=['accuracy'])
+                if self.upgrade_model:
+                    model.compile(loss=sparse_categorical_crossentropy,
+                                  optimizer=Lookahead(optimizer=Lookahead(optimizer='adam'), sync_period=study.best_params['sync_period'],slow_step_size=study.best_params['slow_step_size']), metrics=['accuracy'])
 
-        # Define per-fold score containers
-        acc_per_fold = []
-        loss_per_fold = []
+                if self.simple_model:
+                    model.compile(loss=sparse_categorical_crossentropy,
+                                  optimizer=Adam(learning_rate=study.best_params['learning_rate'], epsilon=study.best_params['epsilon']), metrics=['accuracy'])
+                # Fit data to model
+                model.fit(self.inputs[train], self.targets[train],
+                                    batch_size=64,
+                                    epochs=10,
+                                    verbose=1)
 
-        # Define the K-fold Cross Validator
-        kfold = KFold(n_splits=3, shuffle=True)
+                # Generate generalization metrics
+                scores = model.evaluate(self.inputs[test], self.targets[test], verbose=0)
 
-        # K-fold Cross Validation model evaluation
-        fold_no = 1
+                # print(
+                #     f'Score for fold {fold_no}: {model.metrics_names[0]} of {scores[0]}; {model.metrics_names[1]} of {scores[1] * 100}%')
 
-        for train, test in kfold.split(self.inputs, self.targets):
-            self.data_array=[]
-            self.data_array.append(fold_no)
-            study = optuna.create_study(direction="maximize")
-            study.optimize(self.objective, n_trials=3)
+                self.data_array.append(scores[1] * 100)
+                # loss_per_fold.append(scores[0])
 
-            # lr_best=study.best_params['lr']
-            # epsilon_best=study.best_params['epsilon']
 
-            self.data_array.append(study.best_params)
-            # Generate a print
-            print('------------------------------------------------------------------------')
-            print(f'Training for fold {fold_no} ...')
+                # fpr, tpr, thresholds = metrics.roc_curve(newarr_input_test[i], newarr_target_test[i], pos_label=2)
+                # # average_precision = average_precision_score(input_test, target_test)
+                # average_precision = tpr / (fpr + tpr)
+                # print("fpr:" + fpr + " tpr:" + tpr + " auc:" + metrics.auc(fpr, tpr))
+                # print("precision:" + str(average_precision))
 
-            model= self.getModel()
-            # Compile the model
-            # model.compile(loss=sparse_categorical_crossentropy, optimizer=Adam(learning_rate=lr_best,epsilon=epsilon_best),metrics=['accuracy'])
-            # Fit data to model
-            model.fit(self.inputs[train], self.targets[train],
-                                batch_size=64,
-                                epochs=10,
-                                verbose=1)
+                self.data.append(self.data_array)
+                fold_no = fold_no + 1
 
-            # Generate generalization metrics
-            scores = model.evaluate(self.inputs[test], self.targets[test], verbose=0)
-
-            # print(
-            #     f'Score for fold {fold_no}: {model.metrics_names[0]} of {scores[0]}; {model.metrics_names[1]} of {scores[1] * 100}%')
-
-            self.data_array.append(scores[1] * 100)
-            # loss_per_fold.append(scores[0])
-            self.data.append(self.data_array)
-            # Increase fold number
-
-            fpr, tpr, thresholds = metrics.roc_curve(input_test, target_test, pos_label=2)
-            # average_precision = average_precision_score(input_test, target_test)
-            average_precision = tpr / (fpr + tpr)
-            print("fpr:" + fpr + " tpr:" + tpr + " auc:" + metrics.auc(fpr, tpr))
-            print("precision:" + str(average_precision))
-
-            fold_no = fold_no + 1
 
         # self.print_scores(acc_per_fold, loss_per_fold)
 
 
 if __name__ == '__main__':
-    datasets = ['cifar100','cifar10','cmaterdb','emnist', 'fashion_mnist', 'kmnist', 'mnist', 'mnist_corrupted','svhn_cropped']
-    optimizer = Adam()
-    opt = Lookahead(optimizer)
-    opt2 = Lookahead(opt)
+    datasets = ['cifar10','fashion_mnist'] #'emnist', 'fashion_mnist']  #,'cmaterdb' 'kmnist', 'mnist', 'mnist_corrupted','svhn_cropped']
     look =lookHead()
-    # look.optimize_curr=Adam
-    look.upgrade_model=True
-    for dataset in datasets:
-        look.model_training('cifar100')
-        # model_training(dataset, opt)
-        # model_training(dataset, opt2)
+    for x in range(3):
+        if x==0:
+            look.loohead_model = True
+        if x==1:
+            look.loohead_model = False
+            look.upgrade_model = True
+        if x==2:
+            look.loohead_model = False
+            look.upgrade_model = False
+            look.simple_model = True
+        for dataset in datasets:
+            look.model_training(dataset)
 
     df = pd.DataFrame(look.data, columns=['Dataset Name', 'Description', 'val_loss', 'loss', 'val_accuracy', 'accuracy', 'lr',
                                      'batch_size', 'batch-norm Y/N'])
