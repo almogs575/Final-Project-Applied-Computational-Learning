@@ -1,14 +1,14 @@
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Flatten, Conv2D, MaxPooling2D
 from tensorflow.keras.losses import sparse_categorical_crossentropy
-from tensorflow.keras.optimizers import Adam,SGD
-from sklearn.model_selection import KFold, RandomizedSearchCV
+from tensorflow.keras.optimizers import Adam
+from sklearn.model_selection import KFold
 import numpy as np
 import tensorflow_datasets as tfds
 # from keras.wrappers.scikit_learn import KerasClassifier
-import tensorflow as tf
+# import tensorflow as tf
 from tensorflow_addons.optimizers import Lookahead
-from tensorflow.keras.backend import clear_session
+# from tensorflow.keras.backend import clear_session
 # import keras_tuner as kt
 import optuna
 optuna.logging.set_verbosity(optuna.logging.WARN)
@@ -16,6 +16,7 @@ optuna.logging.set_verbosity(optuna.logging.WARN)
 # from optkeras.optkeras import OptKeras
 from statistics import mean
 import pandas as pd
+from sklearn import metrics
 
 class lookHead:
     name = ""
@@ -127,11 +128,11 @@ class lookHead:
     def model_training(self,dataset_name):
         # Load dataset
         (input_train, target_train), (input_test, target_test) = self.load_dataset(dataset_name)
-        #
 
-        newarr = np.array_split(target_test,10)
 
-        self.classes=np.unique(newarr[0]).size
+        # newarr = np.array_split(target_test,10)
+
+        # self.classes=np.unique(newarr[0]).size
 
         # Determine shape of the data
         samples, img_width, img_height, img_num_channels = input_train.shape
@@ -182,10 +183,16 @@ class lookHead:
             # loss_per_fold.append(scores[0])
             self.data.append(self.data_array)
             # Increase fold number
+
+            fpr, tpr, thresholds = metrics.roc_curve(input_test, target_test, pos_label=2)
+            # average_precision = average_precision_score(input_test, target_test)
+            average_precision = tpr / (fpr + tpr)
+            print("fpr:" + fpr + " tpr:" + tpr + " auc:" + metrics.auc(fpr, tpr))
+            print("precision:" + str(average_precision))
+
             fold_no = fold_no + 1
 
         # self.print_scores(acc_per_fold, loss_per_fold)
-
 
 
 if __name__ == '__main__':
