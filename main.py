@@ -11,6 +11,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow_addons.optimizers import Lookahead
 import optuna
+import scikit_posthocs as sp
 
 optuna.logging.set_verbosity(optuna.logging.WARN)
 from statistics import mean
@@ -223,7 +224,9 @@ class lookAhead:
         return True
 
     def hoc_test(self):
-        return True
+        data = np.array([self.auc_lookAhead, self.auc_adam, self.auc_improved_lookAhead])
+        hoc = sp.posthoc_nemenyi_friedman(data)
+        print(hoc)
 
 
 if __name__ == '__main__':
