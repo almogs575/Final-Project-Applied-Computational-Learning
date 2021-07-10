@@ -222,6 +222,9 @@ class lookAhead:
             return False
         return True
 
+    def hoc_test(self):
+        return True
+
 
 if __name__ == '__main__':
     datasets = ['cifar10',
@@ -248,3 +251,6 @@ if __name__ == '__main__':
                                'Accuracy', 'TPR', 'FPR',
                                'Precision', 'AUC', 'PR-Curve', 'Training Time', 'Inference Time'])
     print(df)
+    friedman = look.friedman_test()
+    if friedman:
+        look.hoc_test()
