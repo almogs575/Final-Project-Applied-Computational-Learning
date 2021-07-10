@@ -11,10 +11,11 @@ import numpy as np
 import tensorflow as tf
 from tensorflow_addons.optimizers import Lookahead
 import optuna
+
 optuna.logging.set_verbosity(optuna.logging.WARN)
 from statistics import mean
+from scipy import stats
 from tensorflow.keras.utils import to_categorical
-
 
 
 class lookAhead:
@@ -31,8 +32,9 @@ class lookAhead:
     lookAhead_model = False
     improved_model = False
     simple_model = False
-
-
+    auc_lookAhead = []
+    auc_improved_lookAhead = []
+    auc_adam = []
 
     def getModel(self):
         # Define the model architecture
@@ -78,7 +80,6 @@ class lookAhead:
         acc_per_fold = []
 
         for train_in, test_in in inter_kfold.split(self.X_train, self.y_train):
-
             model.fit(self.X_train[train_in], to_categorical(self.y_train[train_in]),
                       validation_data=(self.X_train[test_in], to_categorical(self.y_train[test_in])), batch_size=128,
                       epochs=5)
@@ -87,8 +88,6 @@ class lookAhead:
             acc_per_fold.append(scores[1] * 100)
 
         return mean(acc_per_fold)
-
-
 
     def normalize_data(self, X_train, X_test):
         # Parse numbers as floats
@@ -101,7 +100,7 @@ class lookAhead:
 
         return X_train, X_test
 
-    def model_training(self, dataset_name,algorithm_name):
+    def model_training(self, dataset_name, algorithm_name):
 
         # Load dataset
         if dataset_name == 'cifar10':
@@ -143,7 +142,7 @@ class lookAhead:
             for train, test in kfold.split(self.X_train, self.y_train):
 
                 self.data_array = []
-                self.data_array.append(dataset_name+"_part_"+str(i))
+                self.data_array.append(dataset_name + "_part_" + str(i))
                 self.data_array.append(algorithm_name)
                 self.data_array.append(fold_no)
                 study = optuna.create_study(direction="maximize")
@@ -168,18 +167,17 @@ class lookAhead:
                                   optimizer=Lookahead(optimizer=Lookahead(optimizer='adam'),
                                                       sync_period=study.best_params['sync_period'],
                                                       slow_step_size=study.best_params['slow_step_size']),
-                                  metrics=['accuracy',tf.keras.metrics.SensitivityAtSpecificity(0.5),
+                                  metrics=['accuracy', tf.keras.metrics.SensitivityAtSpecificity(0.5),
                                            tf.keras.metrics.SpecificityAtSensitivity(0.5), tf.keras.metrics.Precision(),
                                            tf.keras.metrics.AUC(), tf.keras.metrics.AUC(curve='PR')])
 
                 if self.simple_model:
                     model.compile(loss=categorical_crossentropy,
                                   optimizer=Adam(learning_rate=study.best_params['learning_rate'],
-                                                 epsilon=study.best_params['epsilon']), metrics=['accuracy',tf.keras.metrics.SensitivityAtSpecificity(0.5),
+                                                 epsilon=study.best_params['epsilon']),
+                                  metrics=['accuracy', tf.keras.metrics.SensitivityAtSpecificity(0.5),
                                            tf.keras.metrics.SpecificityAtSensitivity(0.5), tf.keras.metrics.Precision(),
                                            tf.keras.metrics.AUC(), tf.keras.metrics.AUC(curve='PR')])
-
-
 
                 start = time.time()
                 # print("Total time: ", time.time() - start, "seconds")
@@ -192,6 +190,19 @@ class lookAhead:
                 # Generate generalization metrics
                 scores = model.evaluate(self.X_test, to_categorical(self.y_test), verbose=0)
 
+                inference_start = time.time()
+                model.predict(self.X_test)
+                inference_stop = time.time() - inference_start
+
+                if self.lookAhead_model:
+                    self.auc_lookAhead.append(scores[5])
+
+                if self.improved_model:
+                    self.auc_improved_lookAhead.append(scores[5])
+
+                if self.simple_model:
+                    self.auc_adam.append(scores[5])
+
                 self.data_array.append(scores[1] * 100)
                 self.data_array.append(scores[2])
                 self.data_array.append(scores[3])
@@ -199,20 +210,27 @@ class lookAhead:
                 self.data_array.append(scores[5])
                 self.data_array.append(scores[6])
                 self.data_array.append(stop)
-                #TODO inference time?
+                self.data_array.append(inference_stop)
 
                 self.data.append(self.data_array)
                 fold_no = fold_no + 1
 
+    def friedman_test(self):
+        results = stats.friedmanchisquare(self.auc_adam, self.auc_lookAhead, self.auc_improved_lookAhead)
+        print(results)
+        if results[1] < 0.05:
+            return False
+        return True
 
 
 if __name__ == '__main__':
-    datasets = ['cifar10','fashion_mnist'] #'emnist', 'fashion_mnist']  #,'cmaterdb' 'kmnist', 'mnist', 'mnist_corrupted','svhn_cropped']
+    datasets = ['cifar10',
+                'fashion_mnist']  # 'emnist', 'fashion_mnist']  #,'cmaterdb' 'kmnist', 'mnist', 'mnist_corrupted','svhn_cropped']
     look = lookAhead()
     for x in range(3):
         if x == 0:
             look.lookAhead_model = True
-            algorithm_name='lookAhead'
+            algorithm_name = 'lookAhead'
         if x == 1:
             look.lookAhead_model = False
             look.improved_model = True
@@ -223,8 +241,10 @@ if __name__ == '__main__':
             look.simple_model = True
             algorithm_name = 'baseline_model'
         for dataset in datasets:
-            look.model_training(dataset,algorithm_name)
+            look.model_training(dataset, algorithm_name)
 
-    df = pd.DataFrame(look.data, columns=['Dataset Name', 'Algorithm Name', 'Cross Validation [1-10]', 'Hyper-Parameters Values', 'Accuracy', 'TPR', 'FPR',
-                                     'Precision','AUC','PR-Curve','Training Time','Inference Time'])
+    df = pd.DataFrame(look.data,
+                      columns=['Dataset Name', 'Algorithm Name', 'Cross Validation [1-10]', 'Hyper-Parameters Values',
+                               'Accuracy', 'TPR', 'FPR',
+                               'Precision', 'AUC', 'PR-Curve', 'Training Time', 'Inference Time'])
     print(df)
