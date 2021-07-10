@@ -168,12 +168,16 @@ class lookAhead:
                                   optimizer=Lookahead(optimizer=Lookahead(optimizer='adam'),
                                                       sync_period=study.best_params['sync_period'],
                                                       slow_step_size=study.best_params['slow_step_size']),
-                                  metrics=['accuracy'])
+                                  metrics=['accuracy',tf.keras.metrics.SensitivityAtSpecificity(0.5),
+                                           tf.keras.metrics.SpecificityAtSensitivity(0.5), tf.keras.metrics.Precision(),
+                                           tf.keras.metrics.AUC(), tf.keras.metrics.AUC(curve='PR')])
 
                 if self.simple_model:
                     model.compile(loss=categorical_crossentropy,
                                   optimizer=Adam(learning_rate=study.best_params['learning_rate'],
-                                                 epsilon=study.best_params['epsilon']), metrics=['accuracy'])
+                                                 epsilon=study.best_params['epsilon']), metrics=['accuracy',tf.keras.metrics.SensitivityAtSpecificity(0.5),
+                                           tf.keras.metrics.SpecificityAtSensitivity(0.5), tf.keras.metrics.Precision(),
+                                           tf.keras.metrics.AUC(), tf.keras.metrics.AUC(curve='PR')])
 
 
 
