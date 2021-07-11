@@ -1,5 +1,6 @@
 import time
 import pandas as pd
+from pandas import read_csv
 from tensorflow import keras
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Flatten, Conv2D, MaxPooling2D
@@ -190,15 +191,6 @@ class lookAhead:
                 model.predict(self.X_test)
                 inference_stop = time.time() - inference_start
 
-                if self.lookAhead_model:
-                    self.auc_lookAhead.append(scores[5])
-
-                if self.improved_model:
-                    self.auc_improved_lookAhead.append(scores[5])
-
-                if self.simple_model:
-                    self.auc_adam.append(scores[5])
-
                 self.data_array.append(scores[1] * 100)
                 self.data_array.append(scores[2])
                 self.data_array.append(scores[3])
@@ -212,6 +204,7 @@ class lookAhead:
                 fold_no = fold_no + 1
 
     def friedman_test(self):
+        self.create_AUC_list("cname.csv")
         results = stats.friedmanchisquare(self.auc_adam, self.auc_lookAhead, self.auc_improved_lookAhead)
         print(results)
         if results[1] < 0.05:
@@ -222,6 +215,18 @@ class lookAhead:
         data = np.array([self.auc_lookAhead, self.auc_adam, self.auc_improved_lookAhead])
         hoc = sp.posthoc_nemenyi_friedman(data)
         print(hoc)
+
+    def create_AUC_list(self, csv):
+        data = read_csv(csv)
+        AUC = data['AUC'].tolist()
+        algorithm = data['Algorithm Name'].tolist()
+        for i in range(len(AUC)):
+            if algorithm[i] == 'lookAhead':
+                self.auc_lookAhead.append(AUC[i])
+            if algorithm[i] == 'baseline_model':
+                self.auc_adam.append(AUC[i])
+            if algorithm[i] == 'lookAhead_improved':
+                self.auc_improved_lookAhead.append(AUC[i])
 
 
 if __name__ == '__main__':
