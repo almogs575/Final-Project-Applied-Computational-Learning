@@ -1,5 +1,4 @@
 import time
-
 import pandas as pd
 from tensorflow import keras
 from tensorflow.keras.models import Sequential
@@ -12,7 +11,6 @@ import tensorflow as tf
 from tensorflow_addons.optimizers import Lookahead
 import optuna
 import scikit_posthocs as sp
-
 optuna.logging.set_verbosity(optuna.logging.WARN)
 from statistics import mean
 from scipy import stats
@@ -27,7 +25,6 @@ class lookAhead:
     y_train = []
     X_test = []
     y_test = []
-    # optimize_curr= None
     data_array = []
     data = []
     lookAhead_model = False
@@ -45,7 +42,6 @@ class lookAhead:
         model.add(Conv2D(64, kernel_size=(3, 3), activation='relu'))
         model.add(MaxPooling2D(pool_size=(2, 2)))
         model.add(Flatten())
-        model.add(Dense(256, activation='relu'))
         model.add(Dense(128, activation='relu'))
         model.add(Dense(self.classes, activation='softmax'))
 
@@ -75,7 +71,7 @@ class lookAhead:
             model.compile(loss=categorical_crossentropy,
                           optimizer=Adam(learning_rate=hp_learning_rate, epsilon=hp_epsilon), metrics=['accuracy'])
 
-        inter_kfold = KFold(n_splits=2, shuffle=True)
+        inter_kfold = KFold(n_splits=3, shuffle=True)
 
         # K-fold Cross Validation model evaluation
         acc_per_fold = []
@@ -83,7 +79,7 @@ class lookAhead:
         for train_in, test_in in inter_kfold.split(self.X_train, self.y_train):
             model.fit(self.X_train[train_in], to_categorical(self.y_train[train_in]),
                       validation_data=(self.X_train[test_in], to_categorical(self.y_train[test_in])), batch_size=128,
-                      epochs=5)
+                      epochs=3)
 
             scores = model.evaluate(self.X_test, to_categorical(self.y_test), verbose=0)
             acc_per_fold.append(scores[1] * 100)
@@ -135,7 +131,7 @@ class lookAhead:
             self.y_test = y_test_split[i]
 
             # Define the K-fold Cross Validator
-            kfold = KFold(n_splits=2, shuffle=True)
+            kfold = KFold(n_splits=10, shuffle=True)
 
             # K-fold Cross Validation model evaluation
             fold_no = 1
@@ -147,7 +143,7 @@ class lookAhead:
                 self.data_array.append(algorithm_name)
                 self.data_array.append(fold_no)
                 study = optuna.create_study(direction="maximize")
-                study.optimize(self.objective, n_trials=1)
+                study.optimize(self.objective, n_trials=50)
                 self.data_array.append(study.best_params)
 
                 # Generate a print
@@ -174,19 +170,18 @@ class lookAhead:
 
                 if self.simple_model:
                     model.compile(loss=categorical_crossentropy,
-                                  optimizer=Adam(learning_rate=study.best_params['learning_rate'],
+                                  optimizer=Adam(learning_rate=study.best_params['lr'],
                                                  epsilon=study.best_params['epsilon']),
                                   metrics=['accuracy', tf.keras.metrics.SensitivityAtSpecificity(0.5),
                                            tf.keras.metrics.SpecificityAtSensitivity(0.5), tf.keras.metrics.Precision(),
                                            tf.keras.metrics.AUC(), tf.keras.metrics.AUC(curve='PR')])
 
-                start = time.time()
-                # print("Total time: ", time.time() - start, "seconds")
+                fit_start = time.time()
                 # Fit data to model
                 model.fit(self.X_train[train], to_categorical(self.y_train[train]),
                           validation_data=(self.X_train[test], to_categorical(self.y_train[test])), batch_size=64,
                           epochs=10, verbose=1)
-                stop = time.time() - start
+                stop_fit = time.time() - fit_start
 
                 # Generate generalization metrics
                 scores = model.evaluate(self.X_test, to_categorical(self.y_test), verbose=0)
@@ -210,7 +205,7 @@ class lookAhead:
                 self.data_array.append(scores[4])
                 self.data_array.append(scores[5])
                 self.data_array.append(scores[6])
-                self.data_array.append(stop)
+                self.data_array.append(stop_fit)
                 self.data_array.append(inference_stop)
 
                 self.data.append(self.data_array)
@@ -230,8 +225,7 @@ class lookAhead:
 
 
 if __name__ == '__main__':
-    datasets = ['cifar10',
-                'fashion_mnist']  # 'emnist', 'fashion_mnist']  #,'cmaterdb' 'kmnist', 'mnist', 'mnist_corrupted','svhn_cropped']
+    datasets = ['cifar10','fashion_mnist']  # 'emnist', 'fashion_mnist']  #,'cmaterdb' 'kmnist', 'mnist', 'mnist_corrupted','svhn_cropped']
     look = lookAhead()
     for x in range(3):
         if x == 0:
@@ -247,13 +241,14 @@ if __name__ == '__main__':
             look.simple_model = True
             algorithm_name = 'baseline_model'
         for dataset in datasets:
-            look.model_training(dataset, algorithm_name)
+            look.model_training('fashion_mnist', algorithm_name)
 
     df = pd.DataFrame(look.data,
                       columns=['Dataset Name', 'Algorithm Name', 'Cross Validation [1-10]', 'Hyper-Parameters Values',
                                'Accuracy', 'TPR', 'FPR',
                                'Precision', 'AUC', 'PR-Curve', 'Training Time', 'Inference Time'])
-    print(df)
+
+    df.to_csv('results.csv', index=False)
     friedman = look.friedman_test()
     if friedman:
         look.hoc_test()
