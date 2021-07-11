@@ -171,7 +171,7 @@ class lookAhead:
             self.data_array.append(algorithm_name)
             self.data_array.append(fold_no)
             study = optuna.create_study(direction="maximize")
-            study.optimize(self.objective, n_trials=50)
+            study.optimize(self.objective, n_trials=1)
             self.data_array.append(study.best_params)
 
             # Generate a print
@@ -214,8 +214,10 @@ class lookAhead:
             # Generate generalization metrics
             scores = model.evaluate(self.X_test, to_categorical(self.y_test), verbose=0)
 
+            while(self.X_test.shape[0]<1000):
+                self.X_test = np.concatenate((self.X_test , self.X_test))
             inference_start = time.time()
-            model.predict(self.X_test)
+            model.predict(self.X_test[:1000])
             inference_stop = time.time() - inference_start
 
             self.data_array.append(scores[1] * 100)
@@ -257,7 +259,7 @@ class lookAhead:
 
 
 if __name__ == '__main__':
-    datasets = ['cifar10','smallnorb','svhn_cropped','mnist_corrupted','mnist','kmnist','fashion_mnist','cifar100','cmaterdb','cmaterdb/devanagari','cmaterdb/telugu','beans','rock_paper_scissors','horses_or_humans']
+    datasets = ['beans','cifar10','smallnorb','svhn_cropped','mnist_corrupted','mnist','kmnist','fashion_mnist','cifar100','cmaterdb','cmaterdb/devanagari','cmaterdb/telugu','rock_paper_scissors','horses_or_humans']
     look = lookAhead()
     for x in range(3):
         if x == 0:
@@ -273,7 +275,7 @@ if __name__ == '__main__':
             look.simple_model = True
             algorithm_name = 'baseline_model'
         for dataset in datasets:
-            look.model_training('fashion_mnist', algorithm_name)
+            look.model_training(dataset, algorithm_name)
 
     df = pd.DataFrame(look.data,
                       columns=['Dataset Name', 'Algorithm Name', 'Cross Validation [1-10]', 'Hyper-Parameters Values',
