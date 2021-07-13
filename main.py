@@ -11,12 +11,14 @@ import tensorflow as tf
 from tensorflow_addons.optimizers import Lookahead
 import optuna
 import scikit_posthocs as sp
+
 optuna.logging.set_verbosity(optuna.logging.WARN)
 from statistics import mean
 from scipy import stats
 from tensorflow.keras.utils import to_categorical
 import tensorflow_datasets as tfds
 import cv2
+
 
 class lookAhead:
     name = ""
@@ -87,7 +89,13 @@ class lookAhead:
 
         return mean(acc_per_fold)
 
-    def load_data(self, dataset_name):
+    def load_data(self, dataset_name_in):
+
+        if (
+                dataset_name_in == 'cifar10_2' or dataset_name_in == 'smallnorb_2' or dataset_name_in == 'svhn_cropped_2' or dataset_name_in == 'mnist_corrupted_2' or dataset_name_in == 'mnist_2' or dataset_name_in == 'kmnist_2' or dataset_name_in == 'fashion_mnist_2'):
+            dataset_name = dataset_name_in[:-2]
+        else:
+            dataset_name = dataset_name_in
 
         X_train, y_train = tfds.as_numpy(tfds.load(
             dataset_name,
@@ -114,7 +122,8 @@ class lookAhead:
             res_img.append(res)
         X_test = np.asarray(res_img)
 
-        if (dataset_name == 'fashion_mnist' or dataset_name == 'kmnist' or dataset_name == 'mnist' or dataset_name == 'svhn_cropped' or dataset_name == 'cifar10'
+        if (
+                dataset_name == 'fashion_mnist' or dataset_name == 'kmnist' or dataset_name == 'mnist' or dataset_name == 'svhn_cropped' or dataset_name == 'cifar10'
                 or dataset_name == 'cifar100' or dataset_name == 'mnist_corrupted' or dataset_name == 'smallnorb'):
 
             if dataset_name == 'fashion_mnist' or dataset_name == 'kmnist' or dataset_name == 'mnist' or dataset_name == 'mnist_corrupted' or dataset_name == 'smallnorb':
@@ -123,9 +132,18 @@ class lookAhead:
 
             return X_train[:1000], X_test[:500], y_train[:1000], y_test[:500]
 
+        elif (
+                dataset_name_in == 'cifar10_2' or dataset_name_in == 'smallnorb_2' or dataset_name_in == 'svhn_cropped_2' or dataset_name_in == 'mnist_corrupted_2' or dataset_name_in == 'mnist_2'
+                or dataset_name_in == 'kmnist_2' or dataset_name_in == 'fashion_mnist_2'):
+
+            if dataset_name_in == 'fashion_mnist_2' or dataset_name_in == 'kmnist_2' or dataset_name_in == 'mnist_2' or dataset_name_in == 'mnist_corrupted_2' or dataset_name_in == 'smallnorb_2':
+                X_train = np.expand_dims(X_train, axis=-1)
+                X_test = np.expand_dims(X_test, axis=-1)
+
+            return X_train[1000:], X_test[500:], y_train[1000:], y_test[500:]
+
         else:
             return X_train, X_test, y_train, y_test
-
 
     def normalize_data(self, X_train, X_test):
         # Parse numbers as floats
@@ -140,6 +158,8 @@ class lookAhead:
 
     def model_training(self, dataset_name, algorithm_name):
 
+        print('------------------------------------------------------------------------')
+        print(f'working on {dataset_name}, in {algorithm_name}')
 
         # Load dataset
         X_train, X_test, y_train, y_test = self.load_data(dataset_name)
@@ -171,7 +191,7 @@ class lookAhead:
             self.data_array.append(algorithm_name)
             self.data_array.append(fold_no)
             study = optuna.create_study(direction="maximize")
-            study.optimize(self.objective, n_trials=1)
+            study.optimize(self.objective, n_trials=50)
             self.data_array.append(study.best_params)
 
             # Generate a print
@@ -214,10 +234,11 @@ class lookAhead:
             # Generate generalization metrics
             scores = model.evaluate(self.X_test, to_categorical(self.y_test), verbose=0)
 
-            while(self.X_test.shape[0]<1000):
-                self.X_test = np.concatenate((self.X_test , self.X_test))
+            temp_X_test = self.X_test
+            while (temp_X_test.shape[0] < 1000):
+                temp_X_test = np.concatenate((temp_X_test, temp_X_test))
             inference_start = time.time()
-            model.predict(self.X_test[:1000])
+            model.predict(temp_X_test[:1000])
             inference_stop = time.time() - inference_start
 
             self.data_array.append(scores[1] * 100)
@@ -259,7 +280,10 @@ class lookAhead:
 
 
 if __name__ == '__main__':
-    datasets = ['beans','cifar10','smallnorb','svhn_cropped','mnist_corrupted','mnist','kmnist','fashion_mnist','cifar100','cmaterdb','cmaterdb/devanagari','cmaterdb/telugu','rock_paper_scissors','horses_or_humans']
+    datasets = ['beans', 'cifar10', 'smallnorb', 'svhn_cropped', 'mnist_corrupted', 'mnist', 'kmnist', 'fashion_mnist',
+                'cmaterdb', 'cmaterdb/devanagari', 'cmaterdb/telugu', 'rock_paper_scissors', 'horses_or_humans',
+                'cifar10_2',
+                'smallnorb_2', 'svhn_cropped_2', 'mnist_corrupted_2', 'mnist_2', 'kmnist_2', 'fashion_mnist_2']
     look = lookAhead()
     for x in range(3):
         if x == 0:
@@ -276,13 +300,12 @@ if __name__ == '__main__':
             algorithm_name = 'baseline_model'
         for dataset in datasets:
             look.model_training(dataset, algorithm_name)
-
     df = pd.DataFrame(look.data,
                       columns=['Dataset Name', 'Algorithm Name', 'Cross Validation [1-10]', 'Hyper-Parameters Values',
                                'Accuracy', 'TPR', 'FPR',
                                'Precision', 'AUC', 'PR-Curve', 'Training Time', 'Inference Time'])
-
     df.to_csv('results.csv', index=False)
+
     friedman = look.friedman_test()
     if friedman:
         look.hoc_test()
