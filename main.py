@@ -258,12 +258,12 @@ class lookAhead:
         results = stats.friedmanchisquare(self.auc_adam, self.auc_lookAhead, self.auc_improved_lookAhead)
         print(results)
         if results[1] < 0.05:
-            return False
-        return True
+            return True
+        return False
 
     def hoc_test(self):
         data = np.array([self.auc_lookAhead, self.auc_adam, self.auc_improved_lookAhead])
-        hoc = sp.posthoc_nemenyi_friedman(data)
+        hoc = sp.posthoc_nemenyi_friedman(data.T)
         print(hoc)
 
     def create_AUC_list(self, csv):
