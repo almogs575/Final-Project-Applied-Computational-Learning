@@ -47,7 +47,7 @@ class lookAhead:
         model.add(Flatten())
         model.add(Dense(128, activation='relu'))
         model.add(Dense(self.classes, activation='softmax'))
-
+        # print(model.summary())
         return model
 
     def objective(self, trial):
